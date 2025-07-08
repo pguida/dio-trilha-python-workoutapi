@@ -1,7 +1,10 @@
 from datetime import datetime
 from uuid import uuid4
-from fastapi import APIRouter, Body, HTTPException, status
+from fastapi import APIRouter, Body, HTTPException, Query, status
 from pydantic import UUID4
+from sqlalchemy.future import select
+from sqlalchemy.exc import IntegrityError
+from fastapi_pagination import Page, paginate
 
 from workout_api.atleta.schemas import AtletaIn, AtletaOut, AtletaUpdate
 from workout_api.atleta.models import AtletaModel
@@ -9,7 +12,6 @@ from workout_api.categorias.models import CategoriaModel
 from workout_api.centro_treinamento.models import CentroTreinamentoModel
 
 from workout_api.contrib.dependencies import DatabaseDependency
-from sqlalchemy.future import select
 
 router = APIRouter()
 
@@ -54,6 +56,12 @@ async def post(
         
         db_session.add(atleta_model)
         await db_session.commit()
+    except IntegrityError:
+        await db_session.rollback()
+        raise HTTPException(
+            status_code=303,
+            detail=f"Já existe um atleta cadastrado com o cpf: {atleta_in.cpf}"
+        )
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
@@ -67,12 +75,32 @@ async def post(
     '/', 
     summary='Consultar todos os Atletas',
     status_code=status.HTTP_200_OK,
-    response_model=list[AtletaOut],
+    response_model=Page[AtletaOut],
 )
-async def query(db_session: DatabaseDependency) -> list[AtletaOut]:
-    atletas: list[AtletaOut] = (await db_session.execute(select(AtletaModel))).scalars().all()
-    
-    return [AtletaOut.model_validate(atleta) for atleta in atletas]
+async def get_all(
+    db_session: DatabaseDependency,
+    nome: str = Query(None, description="Filtrar por nome"),
+    cpf: str = Query(None, description="Filtrar por CPF"),
+    limit: int = Query(10, ge=1),
+    offset: int = Query(0, ge=0)
+):
+    query = select(AtletaModel)
+    if nome:
+        query = query.where(AtletaModel.nome.ilike(f"%{nome}%"))
+    if cpf:
+        query = query.where(AtletaModel.cpf == cpf)
+    result = await db_session.execute(query.offset(offset).limit(limit))
+    atletas = result.scalars().all()
+
+    response = [
+        AtletaOut(
+            nome=atleta.nome,
+            centro_treinamento=atleta.centro_treinamento.nome if atleta.centro_treinamento else None,
+            categoria=atleta.categoria.nome if atleta.categoria else None
+        )
+        for atleta in atletas
+    ]
+    return paginate(response)
 
 
 @router.get(
