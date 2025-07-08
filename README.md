@@ -1,4 +1,4 @@
-# dio-trilha-python-workoutapi
+# Desenvolvendo sua Primeira API com FastAPI, Python e Docker
 
 # Ambiente virtual 
 Cria ambiente

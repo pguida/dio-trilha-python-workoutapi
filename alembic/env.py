@@ -6,8 +6,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
-from workout_api.contrib.repository import BaseModel
-from workout_api.contrib.repository.models import *
+
+# Importe todos os modelos
+from workout_api.atleta import models as atleta_models
+from workout_api.categorias import models as categoria_models
+from workout_api.centro_treinamento import models as centro_treinamento_models
+from workout_api.contrib.models import BaseModel
 
 config = context.config
 
